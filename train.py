@@ -68,6 +68,7 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
             y = input_y.view( -1 )  # query_batch = 1
             # 各タスクについて、上で求めたモデルパラメーターを使って損失を求める。
             logits = model.adaptation( x, a, weights2 )
+            #outer_loss += loss_fn( logits, y )
             outer_loss0 = loss_fn( logits, y )
             outer_loss += outer_loss0
 
@@ -88,6 +89,7 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
             
         outer_optimizer.step()
         outer_optimizer.zero_grad()
+
 
             
     ## 訓練時、二番目の損失関数（各タスクの総和）を使って、一番目の損失関数によるモデルパラメータの前を基準に勾配を求める。
