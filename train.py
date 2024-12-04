@@ -68,22 +68,42 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
             y = input_y.view( -1 )  # query_batch = 1
             # 各タスクについて、上で求めたモデルパラメーターを使って損失を求める。
             logits = model.adaptation( x, a, weights2 )
-            outer_loss += loss_fn( logits, y )
-            
-    # 訓練時、二番目の損失関数（各タスクの総和）を使って、一番目の損失関数によるモデルパラメータの前を基準に勾配を求める。
+            outer_loss0 = loss_fn( logits, y )
+            outer_loss += outer_loss0
+
+            tmp = torch.autograd.grad( outer_loss0, weights2.values() )
+            if idx ==0:
+                gradients2 = list(tmp)
+            else:
+                #gradients2 += list(tmp)
+                gradients2 = [x + y for x, y in zip(gradients2, list(tmp))]
+        
+        ## 各タスクについて、上で求めたモデルパラメーターを使って損失を求める。
+        #logits = model.adaptation( x, a, weights2 )
+        #outer_loss += loss_fn( logits, y )
     if train:
-        gradients2 = torch.autograd.grad(outer_loss, weights.values())
-        #weights = OrderedDict((name, param - lr2 * grad) for ((name, param), grad) in zip(weights.items(), gradients2))
 
-    #　上で求めた勾配で、モデルのパラメーターを更新する。
-    for i, params in enumerate(model.parameters()):
-        if train:
+        for i, params in enumerate(model.parameters()):
             params.grad = gradients2[i]
-        else:
-            params.grad = gradients[i]
+            
+        outer_optimizer.step()
+        outer_optimizer.zero_grad()
 
-    outer_optimizer.step()
-    outer_optimizer.zero_grad()    
+            
+    ## 訓練時、二番目の損失関数（各タスクの総和）を使って、一番目の損失関数によるモデルパラメータの前を基準に勾配を求める。
+    #if train:
+    #    gradients2 = torch.autograd.grad(outer_loss, weights.values())
+    #    #weights = OrderedDict((name, param - lr2 * grad) for ((name, param), grad) in zip(weights.items(), gradients2))
+
+    ##　上で求めた勾配で、モデルのパラメーターを更新する。
+    #for i, params in enumerate(model.parameters()):
+    #    if train:
+    #        params.grad = gradients2[i]
+    #    else:
+    #        params.grad = gradients[i]
+
+    #outer_optimizer.step()
+    #outer_optimizer.zero_grad()    
 
     torch.cuda.empty_cache()
 
