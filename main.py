@@ -106,7 +106,8 @@ def main():
                 loss_all_val = []
 
                 for val_task in db_val:
-                    loss, acc = validation(model, val_task, loss_fn, train_step = 10, device=device, lr1 = lr_inner)
+                    #loss, acc = validation(model, val_task, loss_fn, train_step = 10, device=device, lr1 = lr_inner)
+                    loss, acc = adaptation(model, outer_optimizer, val_task, loss_fn,  train_step=10, train=False, device=device, lr1 = lr_inner)
                     acc_all_val.append(acc)
                     loss_all_val.append( loss )
 

@@ -63,7 +63,7 @@ def main():
     # test 用の taskset を作り outer_batch の次元を加える。
     for i in range( outer_batch0 ):
         #print( "i:", i )
-        test = build_task_dataset( testset, num_all_class = num_all_class, num_task = num_task, k_support=10, k_query=10, num_class = num_class, inner_batch = 1, is_val = True )
+        test = build_task_dataset( testset, num_all_class = num_all_class, num_task = num_task, k_support=5, k_query=5, num_class = num_class, inner_batch = 1, is_val = True )
         ob_test.append( test )
 
     # test

@@ -3,7 +3,7 @@ from collections import OrderedDict
 import torch.nn.functional as F
 import numpy as np
 
-max_seq = 128
+#max_seq = 128
 
 def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device, lr1 ):
 
@@ -62,16 +62,21 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
         input_y = y_val[idx].to(device)
         
         # 訓練時に query データ（inner_batch = 1, query_k * 2 クラス )　で二番目の損失関数の各タスクについての総和を求める。
-        if train:
-            x = input_x.view( -1, max_seq ) # query_batch = 1
-            a = input_a.view( -1, max_seq )
-            y = input_y.view( -1 )  # query_batch = 1
-            # 各タスクについて、上で求めたモデルパラメーターを使って損失を求める。
-            logits = model.adaptation( x, a, weights2 )
-            #outer_loss += loss_fn( logits, y )
-            outer_loss0 = loss_fn( logits, y )
-            outer_loss += outer_loss0
 
+        x = input_x.view( -1, input_x.size(2) ) # query_batch = 1
+        a = input_a.view( -1, input_x.size(2) )
+        y = input_y.view( -1 )  # query_batch = 1
+        # 各タスクについて、上で求めたモデルパラメーターを使って損失を求める。
+        logits = model.adaptation( x, a, weights2 )
+        #outer_loss += loss_fn( logits, y )
+        outer_loss0 = loss_fn( logits, y )
+        outer_loss += outer_loss0
+        pre_label_id = torch.argmax( logits, dim = 1 )
+        acc = torch.sum( torch.eq( pre_label_id, y ).float() ) / y.size(0)
+        task_accs.append(acc)
+
+        if train:
+            
             tmp = torch.autograd.grad( outer_loss0, weights2.values() )
             if idx ==0:
                 gradients2 = list(tmp)
@@ -90,6 +95,8 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
         outer_optimizer.step()
         outer_optimizer.zero_grad()
 
+    task_accs = torch.stack( task_accs )
+    loss = outer_loss
 
             
     ## 訓練時、二番目の損失関数（各タスクの総和）を使って、一番目の損失関数によるモデルパラメータの前を基準に勾配を求める。
@@ -109,26 +116,26 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
 
     torch.cuda.empty_cache()
 
-    # 更新したモデルパラメーターを用いて、損失と精度を求める。
-    loss = 0
-    for idx in range(x_train.size(0)): # task
+    ## 更新したモデルパラメーターを用いて、損失と精度を求める。
+    #loss = 0
+    #for idx in range(x_train.size(0)): # task
 
-        # query data
-        input_x = x_val[idx].to(device)
-        input_a = a_val[idx].to(device)
-        input_y = y_val[idx].to(device)
+    #    # query data
+    #    input_x = x_val[idx].to(device)
+    #    input_a = a_val[idx].to(device)
+    #    input_y = y_val[idx].to(device)
 
-        with torch.no_grad():
-            x = input_x.view( -1, max_seq ) # query_batch = 1
-            a = input_a.view( -1, max_seq )
-            y = input_y.view( -1 )  # query_batch = 1
-            q_outputs = model( x, a )
-            loss += loss_fn( q_outputs, y )
-            pre_label_id = torch.argmax( q_outputs, dim = 1 )
-            acc = torch.sum( torch.eq( pre_label_id, y ).float() ) / y.size(0)
-            task_accs.append(acc)
+    #    with torch.no_grad():
+    #        x = input_x.view( -1, input_x.size(2) ) # query_batch = 1
+    #        a = input_a.view( -1, input_x.size(2) )
+    #        y = input_y.view( -1 )  # query_batch = 1
+    #        q_outputs = model( x, a )
+    #        loss += loss_fn( q_outputs, y )
+    #        pre_label_id = torch.argmax( q_outputs, dim = 1 )
+    #        acc = torch.sum( torch.eq( pre_label_id, y ).float() ) / y.size(0)
+    #        task_accs.append(acc)
             
-    task_accs = torch.stack( task_accs )
+    #task_accs = torch.stack( task_accs )
             
     print( "loss:", loss.item() / ( idx + 1 ) )
 
@@ -164,9 +171,9 @@ def validation(model, batch, loss_fn, train_step, device, lr1):
 
         # 各タスクについて train_step 回学習をループし、パラメーターを求める。
         for iter in range(train_step):
-            x = input_x.view( -1, max_seq ) 
+            x = input_x.view( -1, input_x.size(2) ) 
                 # support_batch [ inner_batch, N * K, 3,32,32] → [ inner_batch * N * K, 3,32,32]
-            a = input_a.view( -1, max_seq )
+            a = input_a.view( -1, input_x.size(2) )
             y = input_y.view( -1 )  # support_batch
             logits = model.adaptation(x, a, weights)
             loss = loss_fn(logits, y)
@@ -186,8 +193,8 @@ def validation(model, batch, loss_fn, train_step, device, lr1):
             input_a = a_val[idx].to(device)
             input_y = y_val[idx].to(device)
             inner_batch = len( input_x )
-            x = input_x.view( -1, max_seq ) # query_inner_batch = 1
-            a = input_a.view( -1, max_seq )
+            x = input_x.view( -1, input_x.size(2) ) # query_inner_batch = 1
+            a = input_a.view( -1, input_x.size(2) )
             y = input_y.view( -1 )  # query_inner_batch = 1
             #inner_batch = len( x ) # 1だと思うけど。
             #print( "inner_batch:", inner_batch )
@@ -243,9 +250,9 @@ def test_model(model, batch, loss_fn, train_step, device,lr1):
 
         # 各タスクについて train_step 回学習をループし、パラメーターを求める。
         for iter in range(train_step):
-            x = input_x.view( -1, max_seq ) 
+            x = input_x.view( -1, input_x.size(2) ) 
                 # support_batch [ inner_batch, max_seq] → [ inner_batch * N * K, max_seq]
-            a = input_a.view( -1, max_seq )
+            a = input_a.view( -1, input_x.size(2) )
             y = input_y.view( -1 )  # support_batch
             logits = model.adaptation(x, a, weights)
             loss = loss_fn(logits, y)
@@ -265,8 +272,8 @@ def test_model(model, batch, loss_fn, train_step, device,lr1):
             input_a = a_val[idx].to(device)
             input_y = y_val[idx].to(device)
             inner_batch = len( input_x ) # 1だと思うけど。
-            x = input_x.view( -1, max_seq ) # query_batch = 1
-            a = input_a.view( -1, max_seq )
+            x = input_x.view( -1, input_x.size(2) ) # query_batch = 1
+            a = input_a.view( -1, input_x.size(2) )
             y = input_y.view( -1 )  # query_batch = 1
             logits = model.adaptation( x, a, weights )
             pred_label_id = torch.argmax( logits, dim = 1 )
