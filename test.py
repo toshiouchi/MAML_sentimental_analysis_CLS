@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 import random
 import time
 from maml import MAML
-from train import test_model
+from train import adaptation
 import pickle
 from torch.utils.data import Dataset
 from collections import OrderedDict
@@ -42,6 +42,7 @@ def main():
     random.shuffle(reviews)    
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case = True)
+    outer_optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
 
     for i, r in enumerate( reviews ):
         reviews[i]['text'] = tokenizer.encode( r['text'] )
@@ -63,7 +64,7 @@ def main():
     # test 用の taskset を作り outer_batch の次元を加える。
     for i in range( outer_batch0 ):
         #print( "i:", i )
-        test = build_task_dataset( testset, num_all_class = num_all_class, num_task = num_task, k_support=5, k_query=5, num_class = num_class, inner_batch = 1, is_val = True )
+        test = build_task_dataset( testset, num_all_class = num_all_class, num_task = num_task, k_support=10, k_query=10, num_class = num_class, is_val = True )
         ob_test.append( test )
 
     # test
@@ -75,7 +76,9 @@ def main():
     for loop, test_task in enumerate( db_test ):
         #random_seed(123)
         #loss, acc = test_model(model, test_task, loss_fn, train_step = 10, device=device, lr1 = lr_inner)
-        loss, acc = test_model(model, test_task, loss_fn, train_step = 10, device=device, lr1 = lr_inner)
+        #loss, acc = test_model(model, test_task, loss_fn, train_step = 10, device=device, lr1 = lr_inner)
+        loss, acc = adaptation(model, outer_optimizer, test_task, loss_fn,  train_step=10, train=False, device=device, lr1 = lr_inner)
+
         acc_all_test.append(acc)
         loss_all_test.append( loss )
         #random_seed(int(time.time() % 10))

@@ -314,7 +314,7 @@ class MAML(nn.Module):
         ) for _ in range(num_layers)])
         self.ftrenc = fTransformerEncoderLayer( dim_hidden, num_heads, dim_feedforward )
 
-        self.logits = nn.Linear( dim_hidden, num_class )
+        self.logits = nn.Linear( dim_hidden * max_seq, num_class )
         #self._reset_parameters()
 
     #def _reset_parameters(self):
@@ -341,9 +341,7 @@ class MAML(nn.Module):
             x = layer(x, attention_ids)
             #print( "layer x:", x )
       
-        #x = x.view( x.size(0), -1 )
-     
-        x = x[:,0,:]
+        x = x.view( x.size(0), -1 )
      
         return self.logits(x)
 
@@ -353,8 +351,6 @@ class MAML(nn.Module):
         for block in range( self.num_layers ):
             x = self.ftrenc(x, attention_ids, block, weights )
         
-        #x = x.view( x.size(0), -1 )
-        
-        x = x[:,0,:]
+        x = x.view( x.size(0), -1 )
         
         return F.linear(x, weights['logits.weight'], weights['logits.bias'])
