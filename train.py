@@ -3,7 +3,7 @@ from collections import OrderedDict
 import torch.nn.functional as F
 import numpy as np
 
-max_seq = 128
+#max_seq = 128
 
 def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device, lr1 ):
 
@@ -49,16 +49,17 @@ def adaptation(model, outer_optimizer, batch, loss_fn, train_step, train, device
         loss_item = loss_item / train_step 
 
         print("Inner Loss: ", loss_item)
-        
+
         # query データからバッチ抽出
         input_x = x_val[idx].to(device)
         input_a = a_val[idx].to(device)
         input_y = y_val[idx].to(device)
         
         # 訓練時に query データ（inner_batch = 1, query_k * 2 クラス )　で二番目の損失関数の各タスクについての総和を求める。
-        x = input_x.view( -1, max_seq ) # query_batch = 1
-        a = input_a.view( -1, max_seq )
-        y = input_y.view( -1 )  # query_batch = 1
+
+        x = input_x
+        a = input_a
+        y = input_y
         # 各タスクについて、上で求めたモデルパラメーターを使って損失を求める。
         if train:
             model.train()
@@ -123,9 +124,9 @@ def test_model(model, batch, loss_fn, train_step, device,lr1):
 
         # 各タスクについて train_step 回学習をループし、パラメーターを求める。
         for iter in range(train_step):
-            x = input_x.view( -1, max_seq ) 
+            x = input_x.view( -1, input_x.size(2) ) 
                 # support_batch [ inner_batch, max_seq] → [ inner_batch * N * K, max_seq]
-            a = input_a.view( -1, max_seq )
+            a = input_a.view( -1, input_x.size(2) )
             y = input_y.view( -1 )  # support_batch
             logits = model.adaptation(x, a, weights)
             loss = loss_fn(logits, y)
@@ -145,8 +146,8 @@ def test_model(model, batch, loss_fn, train_step, device,lr1):
             input_a = a_val[idx].to(device)
             input_y = y_val[idx].to(device)
             inner_batch = len( input_x ) # 1だと思うけど。
-            x = input_x.view( -1, max_seq ) # query_batch = 1
-            a = input_a.view( -1, max_seq )
+            x = input_x.view( -1, input_x.size(2) ) # query_batch = 1
+            a = input_a.view( -1, input_x.size(2) )
             y = input_y.view( -1 )  # query_batch = 1
             logits = model.adaptation( x, a, weights )
             pred_label_id = torch.argmax( logits, dim = 1 )
