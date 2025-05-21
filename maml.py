@@ -3,6 +3,46 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class PositionalEncoding(nn.Module):
+    '''
+    位置エンコーディング （Positional encoding）
+    dim_embedding: 埋込み次元
+    max_len      : 入力の最大系列長
+    temperature  : 温度定数
+    '''
+    def __init__(self, dim_embedding: int,
+                 max_len: int=5000, temperature=10000):
+        super().__init__()
+
+        assert dim_embedding % 2 == 0
+
+        dim_t = torch.arange(0, dim_embedding, 2)
+        dim_t = dim_t / dim_embedding
+        dim_t = temperature ** dim_t
+
+        x_encoding = torch.arange(max_len).unsqueeze(1)
+        x_encoding = x_encoding / dim_t
+
+        # 位置情報を保持するテンソル
+
+        pe = torch.zeros(max_len, dim_embedding)
+        pe[:, ::2] = x_encoding.sin()
+        pe[:, 1::2] = x_encoding.cos()
+
+        # PEをメモリに保存
+        self.register_buffer('pe', pe)
+
+    '''
+    位置エンコーディングの順伝播
+    x: 位置エンコーディングを埋め込む対象のテンソル,
+       [バッチサイズ, 系列長, 埋め込み次元]
+    '''
+    def forward(self, x: torch.Tensor):
+        seq = x.shape[1]
+        x = x + self.pe[:seq]
+
+        return x    
+
 class SelfAttention(nn.Module):
     '''
     自己アテンション
@@ -70,103 +110,6 @@ class SelfAttention(nn.Module):
         x = self.proj_out(x)
 
         return x
-
-
-class FNN(nn.Module):
-    '''
-    Transformerエンコーダ内の順伝播型ニューラルネットワーク
-    dim_hidden     : 入力特徴量の次元
-    dim_feedforward: 中間特徴量の次元
-    '''
-    def __init__(self, dim_hidden: int, dim_feedforward: int):
-        super().__init__()
-
-        self.linear1 = nn.Linear(dim_hidden, dim_feedforward)
-        self.linear2 = nn.Linear(dim_feedforward, dim_hidden)
-        self.activation = nn.GELU()
-
-    '''
-    順伝播関数
-    x: 入力特徴量, [バッチサイズ, 特徴量数, 特徴量次元]
-    '''
-    def forward(self, x: torch.Tensor):
-        x = self.linear1(x)
-        x = self.activation(x)
-        x = self.linear2(x)
-
-        return x
-
-class TransformerEncoderLayer(nn.Module):
-    '''
-    Transformerエンコーダ層
-    dim_hidden     : 入力特徴量の次元
-    num_heads      : ヘッド数
-    dim_feedforward: 中間特徴量の次元
-    '''
-    def __init__(self, dim_hidden: int, num_heads: int,
-                 dim_feedforward: int):
-        super().__init__()
-
-        self.attention = SelfAttention(dim_hidden, num_heads)
-        self.fnn = FNN(dim_hidden, dim_feedforward)
-
-        self.norm1 = nn.LayerNorm(dim_hidden)
-        self.norm2 = nn.LayerNorm(dim_hidden)
-
-    '''
-    順伝播関数
-    x: 入力特徴量, [バッチサイズ, 特徴量数, 特徴量次元]
-    '''
-    def forward(self, x: torch.Tensor, attention_ids: torch.Tensor):
-        x = self.norm1(x)
-        x = self.attention(x, attention_ids) + x
-        x = self.norm2(x)
-        x = self.fnn(x) + x
-        
-        return x 
-
-        return x
-
-class PositionalEncoding(nn.Module):
-    '''
-    位置エンコーディング （Positional encoding）
-    dim_embedding: 埋込み次元
-    max_len      : 入力の最大系列長
-    temperature  : 温度定数
-    '''
-    def __init__(self, dim_embedding: int,
-                 max_len: int=5000, temperature=10000):
-        super().__init__()
-
-        assert dim_embedding % 2 == 0
-
-        dim_t = torch.arange(0, dim_embedding, 2)
-        dim_t = dim_t / dim_embedding
-        dim_t = temperature ** dim_t
-
-        x_encoding = torch.arange(max_len).unsqueeze(1)
-        x_encoding = x_encoding / dim_t
-
-        # 位置情報を保持するテンソル
-
-        pe = torch.zeros(max_len, dim_embedding)
-        pe[:, ::2] = x_encoding.sin()
-        pe[:, 1::2] = x_encoding.cos()
-
-        # PEをメモリに保存
-        self.register_buffer('pe', pe)
-
-    '''
-    位置エンコーディングの順伝播
-    x: 位置エンコーディングを埋め込む対象のテンソル,
-       [バッチサイズ, 系列長, 埋め込み次元]
-    '''
-    def forward(self, x: torch.Tensor):
-        seq = x.shape[1]
-        x = x + self.pe[:seq]
-
-        return x    
-    
 
 class fSelfAttention(nn.Module):
     '''
@@ -239,6 +182,31 @@ class fSelfAttention(nn.Module):
 
         return x
 
+
+class FNN(nn.Module):
+    '''
+    Transformerエンコーダ内の順伝播型ニューラルネットワーク
+    dim_hidden     : 入力特徴量の次元
+    dim_feedforward: 中間特徴量の次元
+    '''
+    def __init__(self, dim_hidden: int, dim_feedforward: int):
+        super().__init__()
+
+        self.linear1 = nn.Linear(dim_hidden, dim_feedforward)
+        self.linear2 = nn.Linear(dim_feedforward, dim_hidden)
+        self.activation = nn.GELU()
+
+    '''
+    順伝播関数
+    x: 入力特徴量, [バッチサイズ, 特徴量数, 特徴量次元]
+    '''
+    def forward(self, x: torch.Tensor):
+        x = self.linear1(x)
+        x = self.activation(x)
+        x = self.linear2(x)
+
+        return x
+
 class fFNN(nn.Module):
     '''
     Transformerエンコーダ内の順伝播型ニューラルネットワーク
@@ -265,6 +233,42 @@ class fFNN(nn.Module):
 
         return x
 
+
+class TransformerEncoderLayer(nn.Module):
+    '''
+    Transformerエンコーダ層
+    dim_hidden     : 入力特徴量の次元
+    num_heads      : ヘッド数
+    dim_feedforward: 中間特徴量の次元
+    '''
+    def __init__(self, dim_hidden: int, num_heads: int,
+                 dim_feedforward: int):
+        super().__init__()
+
+        self.attention = SelfAttention(dim_hidden, num_heads)
+        self.fnn = FNN(dim_hidden, dim_feedforward)
+
+        self.norm1 = nn.LayerNorm(dim_hidden)
+        self.norm2 = nn.LayerNorm(dim_hidden)
+        
+        self.dropout = nn.Dropout( 0.1 )
+
+    '''
+    順伝播関数
+    x: 入力特徴量, [バッチサイズ, 特徴量数, 特徴量次元]
+    '''
+    def forward(self, x: torch.Tensor, attention_ids: torch.Tensor):
+        x0 = x
+        x = self.attention(x, attention_ids) 
+        x = self.dropout( x )
+        x = self.norm1( x0 + x )
+        x1 = x
+        x = self.fnn(x)
+        x = self.dropout( x )
+        x = self.norm2( x + x1 )
+
+        return x
+
 class fTransformerEncoderLayer(nn.Module):
     '''
     Transformerエンコーダ層
@@ -280,17 +284,23 @@ class fTransformerEncoderLayer(nn.Module):
         self.ffnn = fFNN(dim_hidden, dim_feedforward)
         self.dim_hidden = dim_hidden
 
+        self.dropout = nn.Dropout( 0.1 )
+
+
     '''
     順伝播関数
     x: 入力特徴量, [バッチサイズ, 特徴量数, 特徴量次元]
     '''
     def forward(self, x: torch.Tensor, attention_ids: torch.Tensor, i, weights ):
-        #x = self.norm1(x, 1, weights)
-        x = F.layer_norm(x, (self.dim_hidden,), weight=weights['layers.' + str(i) + '.norm1.weight'], bias=weights['layers.' + str(i) + '.norm1.bias'], eps=1e-05)
-        x = self.fattention(x, attention_ids, i, weights ) + x
-        #x = self.norm2(x)
-        x = F.layer_norm(x, (self.dim_hidden,), weight=weights['layers.' + str(i) + '.norm2.weight'], bias=weights['layers.' + str(i) + '.norm2.bias'], eps=1e-05)
-        x = self.ffnn(x, i, weights) + x
+        x0 = x
+        x = self.fattention(x, attention_ids, i, weights ) 
+        x = self.dropout( x )
+        x = F.layer_norm(x0 + x, (self.dim_hidden,), weight=weights['layers.' + str(i) + '.norm1.weight'], bias=weights['layers.' + str(i) + '.norm1.bias'], eps=1e-05)
+        x1 = x
+        x = self.ffnn(x, i, weights)
+        x = self.dropout( x )
+        x = F.layer_norm(x + x1, (self.dim_hidden,), weight=weights['layers.' + str(i) + '.norm2.weight'], bias=weights['layers.' + str(i) + '.norm2.bias'], eps=1e-05)
+
 
         return x
 
@@ -315,20 +325,6 @@ class MAML(nn.Module):
         self.ftrenc = fTransformerEncoderLayer( dim_hidden, num_heads, dim_feedforward )
 
         self.logits = nn.Linear( dim_hidden, num_class )
-        #self._reset_parameters()
-
-    #def _reset_parameters(self):
-    #    print( "execute reset parameters:" )
-    #    for module in self.modules():
-    #        if isinstance(module, nn.Linear):
-    #            nn.init.normal_(module.weight, mean=0.0, std=0.02)
-    #            if module.bias is not None:
-    #                nn.init.zeros_(module.bias)
-    #            #nn.init.xavier_normal_(module.weight)
-    #            #nn.init.xavier_normal_(module.bias)
-    #        elif isinstance(module, nn.LayerNorm):
-    #            nn.init.zeros_(module.bias)
-    #            nn.init.ones_(module.weight)
    
 
     def forward(self, x, attention_ids):
